@@ -53,6 +53,8 @@ const Index = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [usePcCache, setUsePcCache] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [authChecked, setAuthChecked] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   // Check if Supabase is configured
   useEffect(() => {
@@ -62,6 +64,7 @@ const Index = () => {
       // Check current session
       supabase.auth.getSession().then(({ data: { session } }) => {
         setUser(session?.user ?? null);
+        setAuthChecked(true);
       });
 
       // Listen for auth changes
@@ -69,9 +72,12 @@ const Index = () => {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         setUser(session?.user ?? null);
+        setAuthChecked(true);
       });
 
       return () => subscription.unsubscribe();
+    } else {
+      setAuthChecked(true);
     }
   }, []);
 
@@ -108,6 +114,8 @@ const Index = () => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       toast.success('Signed out successfully');
+      // Reload page to clear user data and load from localStorage
+      setTimeout(() => window.location.reload(), 500);
     } catch (error: any) {
       toast.error('Failed to sign out: ' + error.message);
     }
@@ -138,6 +146,8 @@ const Index = () => {
       setAuthEmail('');
       setAuthPassword('');
       setConfirmPassword('');
+      // Reload page after signup
+      setTimeout(() => window.location.reload(), 1500);
     } catch (error: any) {
       toast.error('Sign up failed: ' + error.message);
     }
@@ -159,6 +169,8 @@ const Index = () => {
       setShowAuthForm(false);
       setAuthEmail('');
       setAuthPassword('');
+      // Reload page to fetch fresh data from Supabase
+      window.location.reload();
     } catch (error: any) {
       toast.error('Sign in failed: ' + error.message);
     }
@@ -167,6 +179,8 @@ const Index = () => {
   // Sync sessions to Supabase
   const syncSessionsToSupabase = async (sessionsToSync: WorkSession[]) => {
     if (!user) return;
+    
+    console.log('Syncing sessions to Supabase:', sessionsToSync.length);
     
     try {
       // Delete existing sessions for this user
@@ -192,9 +206,11 @@ const Index = () => {
           );
         
         if (error) throw error;
+        console.log('Successfully synced sessions to Supabase');
       }
     } catch (error: any) {
       console.error('Failed to sync sessions:', error);
+      toast.error('Failed to sync data to cloud');
     }
   };
 
@@ -278,6 +294,8 @@ const Index = () => {
   // Load from Supabase when user logs in
   useEffect(() => {
     if (user) {
+      // Clear localStorage data before loading from Supabase
+      localStorage.removeItem('workSessions');
       loadSessionsFromSupabase();
       loadSettingsFromSupabase();
       toast.success('Welcome back! Loading your data...');
@@ -286,14 +304,56 @@ const Index = () => {
 
   // Sync to Supabase when sessions change (if logged in)
   useEffect(() => {
-    if (user && sessions.length > 0) {
-      syncSessionsToSupabase(sessions);
+    if (!initialLoadDone) return; // Don't sync until initial load is complete
+    
+    if (user) {
+      console.log('Sessions changed, scheduling sync...', sessions.length);
+      // Debounce sync to avoid race conditions
+      const syncTimeout = setTimeout(async () => {
+        console.log('Syncing sessions to Supabase:', sessions.length);
+        
+        try {
+          // Delete existing sessions for this user
+          await supabase
+            .from('work_sessions')
+            .delete()
+            .eq('user_id', user.id);
+          
+          // Insert all sessions
+          if (sessions.length > 0) {
+            const { error } = await supabase
+              .from('work_sessions')
+              .insert(
+                sessions.map(session => ({
+                  id: session.id,
+                  user_id: user.id,
+                  start_time: new Date(session.startTime).toISOString(),
+                  end_time: new Date(session.endTime).toISOString(),
+                  duration: session.duration,
+                  earnings: session.earnings,
+                  hourly_rate: hourlyRate,
+                }))
+              );
+            
+            if (error) throw error;
+            console.log('Successfully synced sessions to Supabase');
+          } else {
+            console.log('No sessions to sync (empty array)');
+          }
+        } catch (error: any) {
+          console.error('Failed to sync sessions:', error);
+          toast.error('Failed to sync data to cloud');
+        }
+      }, 500);
+      
+      return () => clearTimeout(syncTimeout);
+    } else {
+      // Save to localStorage when not logged in
+      if (sessions.length > 0) {
+        localStorage.setItem("workSessions", JSON.stringify(sessions));
+      }
     }
-    // Also save to localStorage as backup
-    if (sessions.length > 0) {
-      localStorage.setItem("workSessions", JSON.stringify(sessions));
-    }
-  }, [sessions, user]);
+  }, [sessions, user, initialLoadDone, hourlyRate]);
 
   // Sync settings to Supabase when they change (if logged in)
   useEffect(() => {
@@ -304,6 +364,8 @@ const Index = () => {
 
   // Load from localStorage on mount (only if not logged in)
   useEffect(() => {
+    if (!authChecked) return; // Wait until we know if user is logged in
+    
     if (!user) {
       const saved = localStorage.getItem("workSessions");
       if (saved) {
@@ -328,7 +390,10 @@ const Index = () => {
     const initialTheme = (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'dark';
     setTheme(initialTheme);
     document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-  }, [user]);
+    
+    // Mark initial load as done
+    setInitialLoadDone(true);
+  }, [user, authChecked]);
 
   // Save settings to localStorage as backup
   useEffect(() => {
@@ -546,15 +611,52 @@ const Index = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isRunning, startTime, hourlyRate, activeSessionId]);
 
-  const deleteSession = (id: string) => {
+  const deleteSession = async (id: string) => {
     setSessions((prev) => prev.filter((s) => s.id !== id));
+    
+    // Also delete from Supabase if logged in
+    if (user) {
+      try {
+        const { error } = await supabase
+          .from('work_sessions')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', user.id);
+        
+        if (error) throw error;
+      } catch (error: any) {
+        console.error('Failed to delete session from Supabase:', error);
+      }
+    }
+    
     toast.success("Session deleted");
   };
 
-  const clearAllSessions = () => {
-    setSessions([]);
-    localStorage.removeItem("workSessions");
-    toast.success("All sessions cleared");
+  const clearAllSessions = async () => {
+    // Also delete all sessions from Supabase if logged in
+    if (user) {
+      try {
+        // First delete from Supabase
+        const { error } = await supabase
+          .from('work_sessions')
+          .delete()
+          .eq('user_id', user.id);
+        
+        if (error) throw error;
+        
+        // Then clear local state
+        setSessions([]);
+        localStorage.removeItem("workSessions");
+        toast.success("All sessions cleared from cloud");
+      } catch (error: any) {
+        console.error('Failed to clear sessions from Supabase:', error);
+        toast.error("Failed to clear cloud data");
+      }
+    } else {
+      setSessions([]);
+      localStorage.removeItem("workSessions");
+      toast.success("All sessions cleared");
+    }
   };
 
   const formatTime = (ms: number) => {
@@ -738,7 +840,7 @@ const Index = () => {
                               type="password"
                               value={authPassword}
                               onChange={(e) => setAuthPassword(e.target.value)}
-                              placeholder="••••••••"
+                              placeholder=""
                               className="mt-1 h-9"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && authMode === 'signin') {
@@ -755,7 +857,7 @@ const Index = () => {
                                 type="password"
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                placeholder="••••••••"
+                                placeholder=""
                                 className="mt-1 h-9"
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
