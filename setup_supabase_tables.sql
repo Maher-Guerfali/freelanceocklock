@@ -20,9 +20,19 @@ CREATE TABLE IF NOT EXISTS user_settings (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Create todos table
+CREATE TABLE IF NOT EXISTS todos (
+  id TEXT PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  completed BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Enable Row Level Security
 ALTER TABLE work_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE todos ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for work_sessions
 CREATE POLICY "Users can view their own sessions"
@@ -54,6 +64,24 @@ CREATE POLICY "Users can update their own settings"
   ON user_settings FOR UPDATE
   USING (auth.uid() = user_id);
 
+-- Create policies for todos
+CREATE POLICY "Users can view their own todos"
+  ON todos FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own todos"
+  ON todos FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own todos"
+  ON todos FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own todos"
+  ON todos FOR DELETE
+  USING (auth.uid() = user_id);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_work_sessions_user_id ON work_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_sessions_start_time ON work_sessions(start_time DESC);
+CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);

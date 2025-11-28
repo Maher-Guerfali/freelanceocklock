@@ -280,6 +280,7 @@ const Index = () => {
     if (user) {
       loadSessionsFromSupabase();
       loadSettingsFromSupabase();
+      toast.success('Welcome back! Loading your data...');
     }
   }, [user]);
 
@@ -288,6 +289,10 @@ const Index = () => {
     if (user && sessions.length > 0) {
       syncSessionsToSupabase(sessions);
     }
+    // Also save to localStorage as backup
+    if (sessions.length > 0) {
+      localStorage.setItem("workSessions", JSON.stringify(sessions));
+    }
   }, [sessions, user]);
 
   // Sync settings to Supabase when they change (if logged in)
@@ -295,39 +300,37 @@ const Index = () => {
     if (user) {
       syncSettingsToSupabase();
     }
-  }, [hourlyRate, userName, userEmail, user]);
+  }, [hourlyRate, userName, userEmail, theme, user]);
 
-  // Load sessions and hourly rate from localStorage on mount
+  // Load from localStorage on mount (only if not logged in)
   useEffect(() => {
-    const saved = localStorage.getItem("workSessions");
-    if (saved) {
-      setSessions(JSON.parse(saved));
+    if (!user) {
+      const saved = localStorage.getItem("workSessions");
+      if (saved) {
+        setSessions(JSON.parse(saved));
+      }
+      const savedRate = localStorage.getItem("hourlyRate");
+      if (savedRate) {
+        setHourlyRate(parseFloat(savedRate));
+      }
+      const savedEmail = localStorage.getItem("userEmail");
+      if (savedEmail) {
+        setUserEmail(savedEmail);
+      }
+      const savedName = localStorage.getItem("userName");
+      if (savedName) {
+        setUserName(savedName);
+      }
     }
-    const savedRate = localStorage.getItem("hourlyRate");
-    if (savedRate) {
-      setHourlyRate(parseFloat(savedRate));
-    }
-    const savedEmail = localStorage.getItem("userEmail");
-    if (savedEmail) {
-      setUserEmail(savedEmail);
-    }
-    const savedName = localStorage.getItem("userName");
-    if (savedName) {
-      setUserName(savedName);
-    }
+    
+    // Theme is loaded regardless of login status
     const savedTheme = localStorage.getItem('theme');
     const initialTheme = (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'dark';
     setTheme(initialTheme);
     document.documentElement.classList.toggle('dark', initialTheme === 'dark');
-  }, []);
+  }, [user]);
 
-  // Save sessions and hourly rate to localStorage whenever they change
-  useEffect(() => {
-    if (sessions.length > 0) {
-      localStorage.setItem("workSessions", JSON.stringify(sessions));
-    }
-  }, [sessions]);
-
+  // Save settings to localStorage as backup
   useEffect(() => {
     localStorage.setItem("hourlyRate", hourlyRate.toString());
   }, [hourlyRate]);
@@ -969,7 +972,7 @@ const Index = () => {
                 onClick={() => carouselApiRef.current?.scrollTo(0)}
               >
                 <div 
-                  className={`absolute right-0 top-1/2 -translate-y-1/2 ${theme === 'light' ? 'bg-primary text-white' : 'bg-zinc-700 text-zinc-100'} px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center`}
+                  className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(0); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -981,20 +984,20 @@ const Index = () => {
                     TODO LIST
                   </p>
                 </div>
-                <div className="flex-1 overflow-auto relative z-10 pr-16">
-                  <TodoList />
+                <div className="flex-1 overflow-auto relative z-10 pr-4 md:pr-16">
+                  <TodoList user={user} />
                 </div>
               </Card>
             </CarouselItem>
 
             {/* Timer Display */}
             <CarouselItem className="pl-2 md:pl-4 basis-full md:basis-[68%]">
-              <Card className={`p-6 md:p-8 text-center space-y-6 shadow-xl h-[550px] relative animate-scale-in ${theme === 'light' ? 'bg-white/95 border-primary/30' : 'bg-zinc-800 border-zinc-700'} backdrop-blur-sm border-2 rounded-2xl overflow-hidden flex flex-col transition-all ${
+              <Card className={`p-4 md:p-6 lg:p-8 text-center space-y-4 md:space-y-6 shadow-xl h-[450px] md:h-[550px] relative animate-scale-in ${theme === 'light' ? 'bg-white/95 border-primary/30' : 'bg-zinc-800 border-zinc-700'} backdrop-blur-sm border-2 rounded-2xl overflow-hidden flex flex-col transition-all ${
                 currentSlide !== 1 ? 'opacity-40 hover:opacity-60' : ''
               }`}>
                 {/* Left TIMER Sticker */}
                 <div 
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(1); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -1004,7 +1007,7 @@ const Index = () => {
                 
                 {/* Right TIMER Sticker */}
                 <div 
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(1); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -1016,8 +1019,8 @@ const Index = () => {
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none"></div>
                 
                 {/* Timer Mode Toggle and Countdown Controls */}
-                <div className={`absolute top-4 left-6 right-6 z-10 flex items-center gap-3 ${theme === 'light' ? 'bg-white/90' : 'bg-zinc-700/70'} backdrop-blur-sm p-3 rounded-2xl shadow-md`}>
-                  <span className={`text-sm font-bold transition-colors ${!isCountdownMode ? 'text-primary' : 'text-muted-foreground'}`}>Count Up</span>
+                <div className={`absolute top-4 left-2 right-2 md:left-6 md:right-6 z-10 flex items-center gap-2 md:gap-3 ${theme === 'light' ? 'bg-white/90' : 'bg-zinc-700/70'} backdrop-blur-sm p-2 md:p-3 rounded-2xl shadow-md text-xs md:text-sm flex-wrap`}>
+                  <span className={`font-bold transition-colors ${!isCountdownMode ? 'text-primary' : 'text-muted-foreground'}`}>Count Up</span>
                   <button
                     onClick={() => setIsCountdownMode(!isCountdownMode)}
                     disabled={isRunning}
@@ -1154,14 +1157,14 @@ const Index = () => {
                 onClick={() => carouselApiRef.current?.scrollTo(2)}
               >
                 <div 
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(2); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
                     STATISTICS
                   </p>
                 </div>
-                <div className="flex-1 overflow-auto relative z-10 pl-16">
+                <div className="flex-1 overflow-auto relative z-10 pl-4 md:pl-16">
                   <StatsChart sessions={sessions} />
                 </div>
               </Card>

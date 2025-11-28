@@ -3,6 +3,8 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { supabase } from "@/lib/supabase";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface TodoItem {
   id: string;
@@ -10,20 +12,91 @@ interface TodoItem {
   completed: boolean;
 }
 
-export const TodoList = () => {
+interface TodoListProps {
+  user: SupabaseUser | null;
+}
+
+export const TodoList = ({ user }: TodoListProps) => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newTodo, setNewTodo] = useState("");
 
-  useEffect(() => {
-    const saved = localStorage.getItem("todos");
-    if (saved) {
-      setTodos(JSON.parse(saved));
+  // Load todos from Supabase when user logs in
+  const loadTodosFromSupabase = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('todos')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      
+      if (error) throw error;
+      
+      if (data) {
+        const loadedTodos: TodoItem[] = data.map(todo => ({
+          id: todo.id,
+          text: todo.text,
+          completed: todo.completed,
+        }));
+        setTodos(loadedTodos);
+      }
+    } catch (error: any) {
+      console.error('Failed to load todos:', error);
     }
-  }, []);
+  };
 
+  // Sync todos to Supabase
+  const syncTodosToSupabase = async (todosToSync: TodoItem[]) => {
+    if (!user) return;
+    
+    try {
+      // Delete all existing todos for this user
+      await supabase
+        .from('todos')
+        .delete()
+        .eq('user_id', user.id);
+      
+      // Insert all current todos
+      if (todosToSync.length > 0) {
+        const { error } = await supabase
+          .from('todos')
+          .insert(
+            todosToSync.map(todo => ({
+              id: todo.id,
+              user_id: user.id,
+              text: todo.text,
+              completed: todo.completed,
+            }))
+          );
+        
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error('Failed to sync todos:', error);
+    }
+  };
+
+  // Load from localStorage or Supabase on mount
   useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
+    if (user) {
+      loadTodosFromSupabase();
+    } else {
+      const saved = localStorage.getItem("todos");
+      if (saved) {
+        setTodos(JSON.parse(saved));
+      }
+    }
+  }, [user]);
+
+  // Save to localStorage or Supabase when todos change
+  useEffect(() => {
+    if (user) {
+      syncTodosToSupabase(todos);
+    } else {
+      localStorage.setItem("todos", JSON.stringify(todos));
+    }
+  }, [todos, user]);
 
   const addTodo = () => {
     if (newTodo.trim()) {
