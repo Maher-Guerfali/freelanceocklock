@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil } from "lucide-react";
+import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil, Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from "@/components/ui/carousel";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TodoList } from "@/components/TodoList";
 import { StatsChart } from "@/components/StatsChart";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -46,9 +47,12 @@ const Index = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [isAuthConfigured, setIsAuthConfigured] = useState(false);
   const [showAuthForm, setShowAuthForm] = useState(false);
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signup');
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [usePcCache, setUsePcCache] = useState(true);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   // Check if Supabase is configured
   useEffect(() => {
@@ -115,6 +119,10 @@ const Index = () => {
       toast.error('Please enter email and password');
       return;
     }
+    if (authPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
     if (authPassword.length < 6) {
       toast.error('Password must be at least 6 characters');
       return;
@@ -129,6 +137,7 @@ const Index = () => {
       setShowAuthForm(false);
       setAuthEmail('');
       setAuthPassword('');
+      setConfirmPassword('');
     } catch (error: any) {
       toast.error('Sign up failed: ' + error.message);
     }
@@ -230,6 +239,7 @@ const Index = () => {
           hourly_rate: hourlyRate,
           user_name: userName,
           user_email: userEmail,
+          theme,
           updated_at: new Date().toISOString(),
         });
       
@@ -256,6 +266,9 @@ const Index = () => {
         setHourlyRate(data.hourly_rate);
         setUserName(data.user_name || userName);
         setUserEmail(data.user_email || userEmail);
+        if (data.theme === 'dark' || data.theme === 'light') {
+          setTheme(data.theme);
+        }
       }
     } catch (error: any) {
       console.error('Failed to load settings:', error);
@@ -302,6 +315,10 @@ const Index = () => {
     if (savedName) {
       setUserName(savedName);
     }
+    const savedTheme = localStorage.getItem('theme');
+    const initialTheme = (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'dark';
+    setTheme(initialTheme);
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark');
   }, []);
 
   // Save sessions and hourly rate to localStorage whenever they change
@@ -322,6 +339,11 @@ const Index = () => {
   useEffect(() => {
     localStorage.setItem("userName", userName);
   }, [userName]);
+
+  useEffect(() => {
+    localStorage.setItem('theme', theme);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
 
   // Track carousel slide changes
   useEffect(() => {
@@ -621,7 +643,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background relative overflow-hidden">
+    <div className={`min-h-screen relative overflow-hidden ${theme === 'light' ? 'bg-white text-zinc-900' : 'bg-zinc-900 text-zinc-100'}`}>
       {/* Animated Background */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-0 -left-4 w-96 h-96 bg-primary/15 rounded-full mix-blend-multiply filter blur-3xl opacity-40 animate-blob"></div>
@@ -630,7 +652,7 @@ const Index = () => {
       </div>
 
       {/* Logo Banner */}
-      <div className="relative bg-primary p-8 shadow-lg sticky top-0 z-50">
+      <div className={`relative ${theme === 'light' ? 'bg-orange-50/80' : 'bg-zinc-800'} p-8 shadow-lg sticky top-0 z-50 backdrop-blur-sm`}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <img
@@ -646,7 +668,7 @@ const Index = () => {
                   <Button
                     onClick={handleSignOut}
                     size="sm"
-                    className="flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl shadow-sm hover:scale-105 transition-transform bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white"
+                    className={`flex items-center gap-1.5 px-4 py-2 font-bold rounded-3xl shadow-sm hover:scale-105 transition-transform ${theme === 'light' ? 'bg-gradient-to-r from-primary to-accent text-white hover:from-primary/90 hover:to-accent/90' : 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'}`}
                   >
                     <LogOut className="w-4 h-4" />
                     <span className="text-sm">Logout</span>
@@ -656,23 +678,30 @@ const Index = () => {
                     <Button
                       onClick={() => setShowAuthForm(!showAuthForm)}
                       size="sm"
-                      className="flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl shadow-sm hover:scale-105 transition-transform bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white"
+                      className={`flex items-center gap-1.5 px-4 py-2 font-bold rounded-3xl shadow-sm hover:scale-105 transition-transform ${theme === 'light' ? 'bg-gradient-to-r from-primary to-accent text-white hover:from-primary/90 hover:to-accent/90' : 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'}`}
                     >
                       <LogIn className="w-4 h-4" />
                       <span className="text-sm">Sign In</span>
                     </Button>
                     
-                    <Button
-                      onClick={() => {
-                        setAuthMode('signup');
-                        setShowAuthForm(!showAuthForm);
-                      }}
-                      size="sm"
-                      variant="outline"
-                      className="flex items-center gap-1.5 px-4 py-2 font-bold rounded-xl shadow-sm hover:scale-105 transition-transform border-2 border-primary/30 bg-white hover:bg-primary/5 text-primary"
-                    >
-                      <span className="text-sm">Sign Up</span>
-                    </Button>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className={`flex items-center gap-2 px-4 py-2 rounded-3xl cursor-default transition-all border-2 ${theme === 'light' ? 'border-primary/30 bg-white' : 'border-zinc-600 bg-zinc-800'}`}>
+                            <input
+                              type="checkbox"
+                              checked={true}
+                              disabled
+                              className="w-4 h-4 accent-primary cursor-default pointer-events-none"
+                            />
+                            <span className={`text-sm font-bold ${theme === 'light' ? 'text-primary' : 'text-zinc-100'}`}>PC Cache</span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-primary text-white font-semibold">
+                          <p>Use cache to save data locally - no worries!</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     
                     {showAuthForm && (
                       <Card className="absolute top-full right-0 mt-2 w-80 p-5 space-y-3 border-2 border-primary/20 bg-white shadow-2xl animate-scale-in rounded-2xl z-50">
@@ -709,12 +738,30 @@ const Index = () => {
                               placeholder="••••••••"
                               className="mt-1 h-9"
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  authMode === 'signup' ? handleEmailSignUp() : handleEmailSignIn();
+                                if (e.key === 'Enter' && authMode === 'signin') {
+                                  handleEmailSignIn();
                                 }
                               }}
                             />
                           </div>
+                          
+                          {authMode === 'signup' && (
+                            <div>
+                              <label className="text-xs font-bold text-muted-foreground uppercase">Confirm Password</label>
+                              <Input
+                                type="password"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                placeholder="••••••••"
+                                className="mt-1 h-9"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleEmailSignUp();
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
                           
                           <Button
                             onClick={authMode === 'signup' ? handleEmailSignUp : handleEmailSignIn}
@@ -740,6 +787,24 @@ const Index = () => {
                 )}
               </div>
             )}
+            {/* Theme Switch */}
+            <div className="relative">
+              <button
+                aria-label="Toggle theme"
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className={`relative inline-flex items-center h-8 w-16 rounded-full transition-colors border ${theme === 'light' ? 'bg-white border-primary/30' : 'bg-zinc-800 border-zinc-600'}`}
+              >
+                <span className={`absolute left-1 flex items-center justify-center w-5 h-5 ${theme === 'light' ? 'text-primary' : 'text-zinc-400'}`}>
+                  <Sun className="w-3.5 h-3.5" />
+                </span>
+                <span className={`absolute right-1 flex items-center justify-center w-5 h-5 ${theme === 'light' ? 'text-zinc-400' : 'text-zinc-100'}`}>
+                  <Moon className="w-3.5 h-3.5" />
+                </span>
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full shadow-sm transition-transform ${theme === 'light' ? 'translate-x-1 bg-primary' : 'translate-x-9 bg-zinc-600'}`}
+                />
+              </button>
+            </div>
             <div 
               className="relative"
               onMouseEnter={() => setShowUserInfo(true)}
@@ -747,14 +812,14 @@ const Index = () => {
             >
               <Button
                 onClick={() => setShowUserInfo(!showUserInfo)}
-                className="flex items-center gap-2 text-lg px-8 py-7 font-bold rounded-2xl shadow-md hover:scale-105 transition-transform bg-white hover:bg-white/90 text-primary"
+                className={`flex items-center gap-2 text-lg px-8 py-7 font-bold rounded-2xl shadow-md hover:scale-105 transition-transform border-2 ${theme === 'light' ? 'bg-white hover:bg-white/90 text-primary border-primary/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-600'}`}
               >
                 <User className="w-6 h-6" />
                 <span className="hidden sm:inline">User Info</span>
               </Button>
               
               {showUserInfo && (
-                <Card className="absolute top-full right-0 mt-2 w-80 p-6 space-y-4 border-2 border-primary/20 bg-white shadow-2xl animate-scale-in rounded-2xl z-50">
+                <Card className={`absolute top-full right-0 mt-2 w-80 p-6 space-y-4 border-2 ${theme === 'light' ? 'border-primary/20 bg-white' : 'border-zinc-700 bg-zinc-800'} shadow-2xl animate-scale-in rounded-2xl z-50`}>
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm font-bold text-muted-foreground">
                       <User className="w-4 h-4" />
@@ -805,14 +870,14 @@ const Index = () => {
               <Button
                 variant="secondary"
                 onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-2 text-lg px-8 py-7 font-bold rounded-2xl shadow-md hover:scale-105 transition-transform bg-white hover:bg-white/90 text-primary"
+                className={`flex items-center gap-2 text-lg px-8 py-7 font-bold rounded-2xl shadow-md hover:scale-105 transition-transform border-2 ${theme === 'light' ? 'bg-white hover:bg-white/90 text-primary border-primary/20' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-100 border-zinc-600'}`}
               >
                 <Settings className="w-6 h-6" />
                 <span className="hidden sm:inline">Settings</span>
               </Button>
               
               {showSettings && (
-                <Card className="absolute top-full right-0 mt-2 w-96 max-h-[80vh] overflow-y-auto p-8 space-y-6 border-2 border-primary/20 bg-white shadow-2xl animate-scale-in rounded-2xl z-50">
+                <Card className={`absolute top-full right-0 mt-2 w-96 max-h-[80vh] overflow-y-auto p-8 space-y-6 border-2 ${theme === 'light' ? 'border-primary/20 bg-white' : 'border-zinc-700 bg-zinc-800'} shadow-2xl animate-scale-in rounded-2xl z-50`}>
                   <h3 className="text-2xl font-black text-primary">⚙️ Settings</h3>
                   <div className="space-y-3">
                     <label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Hourly Rate (€)</label>
@@ -898,13 +963,13 @@ const Index = () => {
             {/* Todo List */}
             <CarouselItem className="pl-2 md:pl-4 basis-full md:basis-[68%]">
               <Card 
-                className={`p-8 md:p-10 h-[550px] flex flex-col animate-fade-in bg-white/95 backdrop-blur-sm border-2 border-primary/30 shadow-lg rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-2xl hover:border-primary/50 ${
+                className={`p-8 md:p-10 h-[550px] flex flex-col animate-fade-in ${theme === 'light' ? 'bg-white/95 border-primary/30' : 'bg-zinc-800 border-zinc-700'} backdrop-blur-sm border-2 shadow-lg rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-2xl ${theme === 'light' ? 'hover:border-primary/50' : 'hover:border-zinc-600'} ${
                   currentSlide !== 0 ? 'opacity-40 hover:opacity-60' : ''
                 }`}
                 onClick={() => carouselApiRef.current?.scrollTo(0)}
               >
                 <div 
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-primary text-white px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className={`absolute right-0 top-1/2 -translate-y-1/2 ${theme === 'light' ? 'bg-primary text-white' : 'bg-zinc-700 text-zinc-100'} px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center`}
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(0); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -912,7 +977,7 @@ const Index = () => {
                   </p>
                 </div>
                 <div className="absolute left-8 bottom-8 pointer-events-none opacity-[0.06] select-none">
-                  <p className="text-7xl font-black text-primary whitespace-nowrap tracking-wider">
+                  <p className={`text-7xl font-black whitespace-nowrap tracking-wider ${theme === 'light' ? 'text-primary' : 'text-zinc-500'}`}>
                     TODO LIST
                   </p>
                 </div>
@@ -924,12 +989,12 @@ const Index = () => {
 
             {/* Timer Display */}
             <CarouselItem className="pl-2 md:pl-4 basis-full md:basis-[68%]">
-              <Card className={`p-6 md:p-8 text-center space-y-6 shadow-xl h-[550px] relative animate-scale-in bg-white/95 backdrop-blur-sm border-2 border-primary/30 rounded-2xl overflow-hidden flex flex-col transition-all ${
+              <Card className={`p-6 md:p-8 text-center space-y-6 shadow-xl h-[550px] relative animate-scale-in ${theme === 'light' ? 'bg-white/95 border-primary/30' : 'bg-zinc-800 border-zinc-700'} backdrop-blur-sm border-2 rounded-2xl overflow-hidden flex flex-col transition-all ${
                 currentSlide !== 1 ? 'opacity-40 hover:opacity-60' : ''
               }`}>
                 {/* Left TIMER Sticker */}
                 <div 
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-primary text-white px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(1); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -939,7 +1004,7 @@ const Index = () => {
                 
                 {/* Right TIMER Sticker */}
                 <div 
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-primary text-white px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-l-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(1); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
@@ -951,7 +1016,7 @@ const Index = () => {
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none"></div>
                 
                 {/* Timer Mode Toggle and Countdown Controls */}
-                <div className="absolute top-4 left-6 right-6 z-10 flex items-center gap-3 bg-white/90 backdrop-blur-sm p-3 rounded-2xl shadow-md">
+                <div className={`absolute top-4 left-6 right-6 z-10 flex items-center gap-3 ${theme === 'light' ? 'bg-white/90' : 'bg-zinc-700/70'} backdrop-blur-sm p-3 rounded-2xl shadow-md`}>
                   <span className={`text-sm font-bold transition-colors ${!isCountdownMode ? 'text-primary' : 'text-muted-foreground'}`}>Count Up</span>
                   <button
                     onClick={() => setIsCountdownMode(!isCountdownMode)}
@@ -1083,21 +1148,16 @@ const Index = () => {
             {/* Stats Chart */}
             <CarouselItem className="pl-2 md:pl-4 basis-full md:basis-[68%]">
               <Card 
-                className={`p-8 md:p-10 h-[550px] flex flex-col animate-fade-in bg-white/95 backdrop-blur-sm border-2 border-primary/30 shadow-lg rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-2xl hover:border-primary/50 ${
+                className={`p-8 md:p-10 h-[550px] flex flex-col animate-fade-in ${theme === 'light' ? 'bg-white/95 border-primary/30' : 'bg-zinc-800 border-zinc-700'} backdrop-blur-sm border-2 shadow-lg rounded-2xl relative overflow-hidden cursor-pointer transition-all hover:scale-[1.02] hover:shadow-2xl ${theme === 'light' ? 'hover:border-primary/50' : 'hover:border-zinc-600'} ${
                   currentSlide !== 2 ? 'opacity-40 hover:opacity-60' : ''
                 }`}
                 onClick={() => carouselApiRef.current?.scrollTo(2)}
               >
                 <div 
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-primary text-white px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-zinc-700 text-zinc-100 px-3 py-10 rounded-r-2xl shadow-lg z-30 cursor-pointer hover:px-5 transition-all !opacity-100 h-[140px] flex items-center justify-center"
                   onClick={(e) => { e.stopPropagation(); carouselApiRef.current?.scrollTo(2); }}
                 >
                   <p className="text-lg font-black tracking-wider" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-                    STATISTICS
-                  </p>
-                </div>
-                <div className="absolute right-8 bottom-8 pointer-events-none opacity-[0.06] select-none">
-                  <p className="text-7xl font-black text-primary whitespace-nowrap tracking-wider">
                     STATISTICS
                   </p>
                 </div>
@@ -1107,13 +1167,13 @@ const Index = () => {
               </Card>
             </CarouselItem>
           </CarouselContent>
-          <CarouselPrevious className="left-4 bg-white hover:scale-110 text-primary border-2 border-primary/30 shadow-lg h-14 w-14 rounded-full transition-transform" />
-          <CarouselNext className="right-4 bg-white hover:scale-110 text-primary border-2 border-primary/30 shadow-lg h-14 w-14 rounded-full transition-transform" />
+          <CarouselPrevious className={`left-4 ${theme === 'light' ? 'bg-white text-primary border-primary/30' : 'bg-zinc-700 text-zinc-100 border-zinc-600'} hover:scale-110 border-2 shadow-lg h-14 w-14 rounded-full transition-transform`} />
+          <CarouselNext className={`right-4 ${theme === 'light' ? 'bg-white text-primary border-primary/30' : 'bg-zinc-700 text-zinc-100 border-zinc-600'} hover:scale-110 border-2 shadow-lg h-14 w-14 rounded-full transition-transform`} />
         </Carousel>
 
         <div className="max-w-6xl mx-auto px-4 md:px-8 space-y-8">
           {/* Total Earnings */}
-          <Card className="p-8 bg-accent/10 border-2 border-accent/20 shadow-lg rounded-2xl">
+          <Card className={`p-8 border-2 shadow-lg rounded-2xl ${theme === 'light' ? 'bg-accent/10 border-accent/20' : 'bg-zinc-800 border-zinc-700'}`}>
           <div className="flex items-center justify-between flex-wrap gap-6">
             <div className="flex items-center gap-5">
               <div className="p-4 bg-accent rounded-2xl shadow-md">
@@ -1128,20 +1188,20 @@ const Index = () => {
             </div>
             {sessions.length > 0 && (
               <div className="flex gap-3 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={sendEmailReport}
-                  className="hover:bg-primary/10 border-2 border-primary/20 font-bold rounded-2xl h-12 bg-white"
-                >
-                  <Mail className="w-5 h-5 mr-2" />
-                  Email Report
-                </Button>
+                <div className="relative h-12">
+                  <div
+                    className={`pointer-events-none select-none border-2 font-bold rounded-2xl h-12 px-4 flex items-center gap-2 ${theme === 'light' ? 'bg-white border-primary/20 text-primary' : 'bg-zinc-800 border-zinc-600 text-zinc-100'}`}
+                  >
+                    <Mail className="w-5 h-5 mr-2 opacity-40" />
+                    <span className="opacity-40">Email Report</span>
+                  </div>
+                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold opacity-50">Soon</span>
+                </div>
                 <Button
                   variant="outline"
                   size="lg"
                   onClick={exportToPDF}
-                  className="hover:bg-primary/10 border-2 border-primary/20 font-bold rounded-2xl h-12 bg-white"
+                  className={`border-2 font-bold rounded-2xl h-12 ${theme === 'light' ? 'bg-white hover:bg-primary/10 border-primary/20 text-primary' : 'bg-zinc-800 hover:bg-zinc-700 border-zinc-600 text-zinc-100'}`}
                 >
                   <Download className="w-5 h-5 mr-2" />
                   Export PDF
@@ -1167,7 +1227,7 @@ const Index = () => {
             {sessions.map((session) => (
               <Card
                 key={session.id}
-                className="p-6 hover:shadow-xl transition-all hover:scale-[1.02] border-2 border-primary/15 bg-white rounded-2xl"
+                className={`p-6 hover:shadow-xl transition-all hover:scale-[1.02] border-2 ${theme === 'light' ? 'border-primary/15 bg-white' : 'border-zinc-700 bg-zinc-800'} rounded-2xl`}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex-1 space-y-2">
@@ -1235,7 +1295,7 @@ const Index = () => {
         )}
 
         {sessions.length === 0 && !isRunning && (
-          <Card className="p-16 text-center text-muted-foreground border-2 border-dashed border-primary/20 bg-white rounded-2xl">
+          <Card className={`p-16 text-center border-2 border-dashed ${theme === 'light' ? 'text-muted-foreground border-primary/20 bg-white' : 'text-zinc-400 border-zinc-700 bg-zinc-800'} rounded-2xl`}>
             <Clock className="w-20 h-20 mx-auto mb-6 opacity-30 text-primary" />
             <p className="text-2xl font-bold">No work sessions yet</p>
             <p className="text-lg mt-2">Start the timer to track your work!</p>

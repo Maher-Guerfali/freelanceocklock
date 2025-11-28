@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   hourly_rate NUMERIC(10, 2) NOT NULL DEFAULT 25.00,
   user_name TEXT,
   user_email TEXT,
+  theme TEXT DEFAULT 'light',
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
