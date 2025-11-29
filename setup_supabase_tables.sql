@@ -81,7 +81,24 @@ CREATE POLICY "Users can delete their own todos"
   ON todos FOR DELETE
   USING (auth.uid() = user_id);
 
+-- Create feedback table
+CREATE TABLE IF NOT EXISTS feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  message TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable Row Level Security for feedback
+ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+
+-- Create policies for feedback (anyone can insert, only admins can view)
+CREATE POLICY "Anyone can submit feedback"
+  ON feedback FOR INSERT
+  WITH CHECK (true);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_work_sessions_user_id ON work_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_work_sessions_start_time ON work_sessions(start_time DESC);
 CREATE INDEX IF NOT EXISTS idx_todos_user_id ON todos(user_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);

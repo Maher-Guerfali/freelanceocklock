@@ -19,6 +19,7 @@ interface TodoListProps {
 export const TodoList = ({ user }: TodoListProps) => {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [newTodo, setNewTodo] = useState("");
+  const [initialLoaded, setInitialLoaded] = useState(false);
 
   // Load todos from Supabase when user logs in
   const loadTodosFromSupabase = async () => {
@@ -34,6 +35,7 @@ export const TodoList = ({ user }: TodoListProps) => {
       if (error) throw error;
       
       if (data) {
+        console.log('[Todos] Loaded from Supabase:', data.length);
         const loadedTodos: TodoItem[] = data.map(todo => ({
           id: todo.id,
           text: todo.text,
@@ -51,6 +53,7 @@ export const TodoList = ({ user }: TodoListProps) => {
     if (!user) return;
     
     try {
+      console.log('[Todos] Syncing to Supabase (bulk):', todosToSync.length);
       // Delete all existing todos for this user
       await supabase
         .from('todos')
@@ -71,6 +74,7 @@ export const TodoList = ({ user }: TodoListProps) => {
           );
         
         if (error) throw error;
+        console.log('[Todos] Bulk sync complete');
       }
     } catch (error: any) {
       console.error('Failed to sync todos:', error);
@@ -80,39 +84,92 @@ export const TodoList = ({ user }: TodoListProps) => {
   // Load from localStorage or Supabase on mount
   useEffect(() => {
     if (user) {
-      loadTodosFromSupabase();
+      (async () => {
+        await loadTodosFromSupabase();
+        setInitialLoaded(true);
+      })();
     } else {
       const saved = localStorage.getItem("todos");
       if (saved) {
         setTodos(JSON.parse(saved));
       }
+      setInitialLoaded(true);
     }
   }, [user]);
 
-  // Save to localStorage or Supabase when todos change
+  // Save to localStorage when todos change (not logged in)
   useEffect(() => {
-    if (user) {
-      syncTodosToSupabase(todos);
-    } else {
+    if (!initialLoaded) return; // avoid race on mount
+    if (!user) {
       localStorage.setItem("todos", JSON.stringify(todos));
     }
-  }, [todos, user]);
+    // When logged in, we use per-item writes (add/toggle/delete) instead of bulk sync
+  }, [todos, user, initialLoaded]);
 
   const addTodo = () => {
     if (newTodo.trim()) {
-      setTodos([...todos, { id: Date.now().toString(), text: newTodo, completed: false }]);
+      const newItem = { id: Date.now().toString(), text: newTodo.trim(), completed: false };
+      setTodos([...todos, newItem]);
+      // Immediately persist to Supabase when logged in
+      if (user) {
+        console.log('[Todos] Adding to Supabase:', newItem);
+        supabase
+          .from('todos')
+          .upsert({ id: newItem.id, user_id: user.id, text: newItem.text, completed: newItem.completed })
+          .then(({ error }) => {
+            if (error) {
+              console.error('Failed to add todo to cloud:', error);
+            } else {
+              console.log('[Todos] Added to cloud');
+            }
+          });
+      }
       setNewTodo("");
     }
   };
 
   const toggleTodo = (id: string) => {
-    setTodos(todos.map(todo => 
+    const updated = todos.map(todo => 
       todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    ));
+    );
+    setTodos(updated);
+    // Persist change to Supabase when logged in
+    if (user) {
+      const changed = updated.find(t => t.id === id);
+      if (changed) {
+        console.log('[Todos] Updating in Supabase:', changed);
+        supabase
+          .from('todos')
+          .upsert({ id: changed.id, user_id: user.id, text: changed.text, completed: changed.completed })
+          .then(({ error }) => {
+            if (error) {
+              console.error('Failed to update todo in cloud:', error);
+            } else {
+              console.log('[Todos] Updated in cloud');
+            }
+          });
+      }
+    }
   };
 
   const deleteTodo = (id: string) => {
     setTodos(todos.filter(todo => todo.id !== id));
+    // Also delete from Supabase when logged in
+    if (user) {
+      console.log('[Todos] Deleting from Supabase:', id);
+      supabase
+        .from('todos')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .then(({ error }) => {
+          if (error) {
+            console.error('Failed to delete todo from cloud:', error);
+          } else {
+            console.log('[Todos] Deleted from cloud');
+          }
+        });
+    }
   };
 
   return (

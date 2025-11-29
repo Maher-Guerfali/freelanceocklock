@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil, Sun, Moon } from "lucide-react";
+import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil, Sun, Moon, Send, Coffee, Heart, X } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from "@/components/ui/carousel";
@@ -55,6 +55,8 @@ const Index = () => {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [authChecked, setAuthChecked] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  const [legalOpen, setLegalOpen] = useState<null | 'terms' | 'license' | 'privacy'>(null);
 
   // Check if Supabase is configured
   useEffect(() => {
@@ -64,6 +66,11 @@ const Index = () => {
       // Check current session
       supabase.auth.getSession().then(({ data: { session } }) => {
         setUser(session?.user ?? null);
+        if (session?.user) {
+          console.log('✅ Logged in - User UUID:', session.user.id);
+        } else {
+          console.log('❌ Not logged in');
+        }
         setAuthChecked(true);
       });
 
@@ -294,8 +301,7 @@ const Index = () => {
   // Load from Supabase when user logs in
   useEffect(() => {
     if (user) {
-      // Clear localStorage data before loading from Supabase
-      localStorage.removeItem('workSessions');
+      // Don't clear localStorage - keep it as backup
       loadSessionsFromSupabase();
       loadSettingsFromSupabase();
       toast.success('Welcome back! Loading your data...');
@@ -305,6 +311,11 @@ const Index = () => {
   // Sync to Supabase when sessions change (if logged in)
   useEffect(() => {
     if (!initialLoadDone) return; // Don't sync until initial load is complete
+    
+    // Always save to localStorage as permanent backup
+    if (sessions.length > 0) {
+      localStorage.setItem("workSessions", JSON.stringify(sessions));
+    }
     
     if (user) {
       console.log('Sessions changed, scheduling sync...', sessions.length);
@@ -347,11 +358,6 @@ const Index = () => {
       }, 500);
       
       return () => clearTimeout(syncTimeout);
-    } else {
-      // Save to localStorage when not logged in
-      if (sessions.length > 0) {
-        localStorage.setItem("workSessions", JSON.stringify(sessions));
-      }
     }
   }, [sessions, user, initialLoadDone, hourlyRate]);
 
@@ -644,9 +650,8 @@ const Index = () => {
         
         if (error) throw error;
         
-        // Then clear local state
+        // Then clear local state (but keep localStorage as backup)
         setSessions([]);
-        localStorage.removeItem("workSessions");
         toast.success("All sessions cleared from cloud");
       } catch (error: any) {
         console.error('Failed to clear sessions from Supabase:', error);
@@ -706,6 +711,27 @@ const Index = () => {
     toast.success("Email client opened!");
   };
 
+  const submitFeedback = async () => {
+    if (!feedbackMessage.trim()) {
+      toast.error('Please enter your feedback');
+      return;
+    }
+    try {
+      const { error } = await supabase
+        .from('feedback')
+        .insert({
+          user_id: user?.id || null,
+          message: feedbackMessage.trim(),
+        });
+      if (error) throw error;
+      toast.success('Thank you for your feedback!');
+      setFeedbackMessage('');
+    } catch (error: any) {
+      console.error('Failed to submit feedback:', error);
+      toast.error('Failed to send feedback. Please try again.');
+    }
+  };
+
   const exportToPDF = () => {
     const doc = new jsPDF();
     const totalTime = getTotalTime();
@@ -743,8 +769,15 @@ const Index = () => {
       yPos += 15;
     });
     
-    doc.save(`time-tracker-report-${new Date().toISOString().split('T')[0]}.pdf`);
-    toast.success("PDF exported successfully!");
+    try {
+      const blobUrl = doc.output('bloburl');
+      window.open(blobUrl, '_blank');
+      toast.success("PDF opened in a new tab!");
+    } catch (e) {
+      // Fallback: download if opening new tab fails
+      doc.save(`time-tracker-report-${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success("PDF downloaded successfully!");
+    }
   };
 
   return (
@@ -786,7 +819,7 @@ const Index = () => {
                       className={`flex items-center gap-1.5 px-4 py-2 font-bold rounded-3xl shadow-sm hover:scale-105 transition-transform ${theme === 'light' ? 'bg-gradient-to-r from-primary to-accent text-white hover:from-primary/90 hover:to-accent/90' : 'bg-zinc-700 text-zinc-100 hover:bg-zinc-600'}`}
                     >
                       <LogIn className="w-4 h-4" />
-                      <span className="text-sm">Sign In</span>
+                      <span className="text-sm">Sync with Cloud</span>
                     </Button>
                     
                     <TooltipProvider>
@@ -967,11 +1000,7 @@ const Index = () => {
                 </Card>
               )}
             </div>
-            <div 
-              className="relative"
-              onMouseEnter={() => setShowSettings(true)}
-              onMouseLeave={() => setShowSettings(false)}
-            >
+            <div className="relative">
               <Button
                 variant="secondary"
                 onClick={() => setShowSettings(!showSettings)}
@@ -982,7 +1011,11 @@ const Index = () => {
               </Button>
               
               {showSettings && (
-                <Card className={`absolute top-full right-0 mt-2 w-96 max-h-[80vh] overflow-y-auto p-8 space-y-6 border-2 ${theme === 'light' ? 'border-primary/20 bg-white' : 'border-zinc-700 bg-zinc-800'} shadow-2xl animate-scale-in rounded-2xl z-50`}>
+                <Card 
+                  className={`absolute top-full right-0 mt-2 w-96 max-h-[80vh] overflow-y-auto p-8 space-y-6 border-2 ${theme === 'light' ? 'border-primary/20 bg-white' : 'border-zinc-700 bg-zinc-800'} shadow-2xl animate-scale-in rounded-2xl z-50`}
+                  onMouseEnter={() => setShowSettings(true)}
+                  onMouseLeave={() => setShowSettings(false)}
+                >
                   <h3 className="text-2xl font-black text-primary">⚙️ Settings</h3>
                   <div className="space-y-3">
                     <label className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Hourly Rate (€)</label>
@@ -1293,15 +1326,7 @@ const Index = () => {
             </div>
             {sessions.length > 0 && (
               <div className="flex gap-3 flex-wrap">
-                <div className="relative h-12">
-                  <div
-                    className={`pointer-events-none select-none border-2 font-bold rounded-2xl h-12 px-4 flex items-center gap-2 ${theme === 'light' ? 'bg-white border-primary/20 text-primary' : 'bg-zinc-800 border-zinc-600 text-zinc-100'}`}
-                  >
-                    <Mail className="w-5 h-5 mr-2 opacity-40" />
-                    <span className="opacity-40">Email Report</span>
-                  </div>
-                  <span className="absolute inset-0 flex items-center justify-center text-xs font-bold opacity-50">Soon</span>
-                </div>
+                {/* Email Report temporarily hidden */}
                 <Button
                   variant="outline"
                   size="lg"
@@ -1407,6 +1432,148 @@ const Index = () => {
           </Card>
         )}
         </div>
+        {/* Footer */}
+        <footer className={`mt-16 py-8 border-t-2 ${theme === 'light' ? 'border-primary/20 bg-white' : 'border-zinc-700 bg-zinc-800'}`}>
+          <div className="max-w-6xl mx-auto px-4 md:px-8">
+                        {/* Feedback Form */}
+                        <div className="mb-6">
+                          <div className="flex gap-2">
+                            <Input
+                              type="text"
+                              value={feedbackMessage}
+                              onChange={(e) => setFeedbackMessage(e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && submitFeedback()}
+                              placeholder="Send feedback..."
+                              className={`flex-1 h-10 text-sm ${theme === 'light' ? 'bg-white border-primary/20' : 'bg-zinc-700 border-zinc-600'} border-2 rounded-xl`}
+                            />
+                            <Button
+                              onClick={submitFeedback}
+                              size="sm"
+                              className="h-10 px-4 bg-primary hover:bg-primary/90 rounded-xl font-bold"
+                            >
+                              <Send className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex flex-col items-center md:items-start gap-2">
+                <p className="text-sm font-semibold text-muted-foreground">Created by Maher Guerfali</p>
+                <div className="flex flex-wrap items-center gap-4 text-sm">
+                  <a
+                    href="mailto:maher.guerfali@gmail.com"
+                    className="text-primary hover:underline font-medium flex items-center gap-1"
+                  >
+                    <Mail className="w-4 h-4" />
+                    maher.guerfali@gmail.com
+                  </a>
+                  <a
+                    href="https://www.mahergrf.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Portfolio
+                  </a>
+                  <a
+                    href="https://www.linkedin.com/in/maher-guerfali/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium"
+                  >
+                    LinkedIn
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-muted-foreground">Support:</span>
+                <a
+                  href="https://buymeacoffee.com/elkarrita"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all ${theme === 'light' ? 'bg-yellow-400 hover:bg-yellow-500 text-zinc-900' : 'bg-yellow-500 hover:bg-yellow-600 text-zinc-900'}`}
+                >
+                  <Coffee className="w-4 h-4" />
+                  Buy Me a Coffee
+                </a>
+                <a
+                  href="https://ko-fi.com/mahergrf"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all ${theme === 'light' ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
+                >
+                  <Heart className="w-4 h-4" />
+                  Ko-fi
+                </a>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <button onClick={() => setLegalOpen('terms')} className={`hover:underline ${theme === 'light' ? 'text-primary' : 'text-zinc-100'}`}>Terms</button>
+                <span>•</span>
+                <button onClick={() => setLegalOpen('license')} className={`hover:underline ${theme === 'light' ? 'text-primary' : 'text-zinc-100'}`}>License</button>
+                <span>•</span>
+                <button onClick={() => setLegalOpen('privacy')} className={`hover:underline ${theme === 'light' ? 'text-primary' : 'text-zinc-100'}`}>Privacy</button>
+              </div>
+            </div>
+          </div>
+        </footer>
+
+        {/* Legal Modal */}
+        {legalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setLegalOpen(null)}></div>
+            <Card className={`relative w-[92vw] max-w-2xl max-h-[80vh] overflow-y-auto border-2 ${theme === 'light' ? 'bg-white border-primary/20' : 'bg-zinc-800 border-zinc-700'} rounded-2xl shadow-2xl`}>
+              <div className="flex items-center justify-between p-4 border-b">
+                <h4 className="text-lg font-black text-primary">
+                  {legalOpen === 'terms' ? 'Terms' : legalOpen === 'license' ? 'License' : 'Privacy'}
+                </h4>
+                <Button variant="ghost" size="icon" onClick={() => setLegalOpen(null)} className="rounded-xl">
+                  <X className="w-5 h-5" />
+                </Button>
+              </div>
+              <div className="p-6 space-y-4 text-sm">
+                {legalOpen === 'terms' && (
+                  <div className="space-y-3">
+                    <p><strong>Copyright Notice:</strong> This software and design is copyrighted. Copying or reproducing is strictly prohibited without prior written consent of the owner.</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Use this app for personal productivity and time tracking.</li>
+                      <li>No reverse engineering, redistribution, or commercial resale without permission.</li>
+                      <li>Do not copy UI/UX designs, layouts, or assets without consent.</li>
+                      <li>Feedback you submit may be used to improve the product.</li>
+                      <li>Service availability is best-effort; no guarantees.</li>
+                    </ul>
+                  </div>
+                )}
+                {legalOpen === 'license' && (
+                  <div className="space-y-3">
+                    <p><strong>All Rights Reserved.</strong> No part of this software, design, or documentation may be copied, distributed, or modified without explicit written permission.</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Non-commercial personal use permitted.</li>
+                      <li>Commercial use, distribution, and modification require written approval.</li>
+                      <li>Derivative works and UI replicas are prohibited without consent.</li>
+                      <li>Attribution must reference: Maher Guerfali.</li>
+                    </ul>
+                  </div>
+                )}
+                {legalOpen === 'privacy' && (
+                  <div className="space-y-3">
+                    <p><strong>We respect your privacy.</strong> Basic app data may be stored in your browser (localStorage) and, if you choose to sign in, in Supabase under your account. No data is sold or shared with third parties.</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Local (PC Cache):</strong> Work sessions, settings, and todos saved in your browser.</li>
+                      <li><strong>Cloud (Supabase):</strong> If logged in, sessions, settings, and todos saved to your account.</li>
+                      <li><strong>Feedback:</strong> Messages you submit via the footer form.</li>
+                    </ul>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Data is used to provide app functionality and improve the product.</li>
+                      <li>No selling or sharing with third parties.</li>
+                      <li>You can delete your data from within the app (sessions/todos) at any time.</li>
+                    </ul>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Questions? Email <a href="mailto:maher.guerfali@gmail.com" className="underline">maher.guerfali@gmail.com</a>.</p>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
 
       <style>{`
