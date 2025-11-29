@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil, Sun, Moon, Send, Coffee, Heart, X } from "lucide-react";
+import { Play, Square, Clock, Euro, Trash2, Settings, Plus, Minus, Mail, Download, ChevronDown, User, TrendingUp, LogIn, LogOut, Pencil, Sun, Moon, Send, Coffee, Heart, X, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from "@/components/ui/carousel";
@@ -57,6 +57,7 @@ const Index = () => {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [legalOpen, setLegalOpen] = useState<null | 'terms' | 'license' | 'privacy'>(null);
+  const [showEarnings, setShowEarnings] = useState(true);
 
   // Check if Supabase is configured
   useEffect(() => {
@@ -1319,9 +1320,20 @@ const Index = () => {
               </div>
               <div>
                 <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Total Earnings</p>
-                <p className="text-5xl font-black text-accent">
-                  €{totalEarnings.toFixed(2)}
-                </p>
+                <div className="flex items-center gap-3">
+                  <p className="text-5xl font-black text-accent select-none">
+                    {showEarnings ? `€${totalEarnings.toFixed(2)}` : '**'}
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={showEarnings ? 'Hide total' : 'Show total'}
+                    onClick={() => setShowEarnings((v) => !v)}
+                    className={`h-10 w-10 rounded-xl ${theme === 'light' ? 'text-primary hover:bg-primary/10' : 'text-zinc-100 hover:bg-zinc-700'}`}
+                  >
+                    {showEarnings ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </Button>
+                </div>
               </div>
             </div>
             {sessions.length > 0 && (
